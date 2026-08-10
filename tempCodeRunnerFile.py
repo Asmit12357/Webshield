@@ -2,8 +2,9 @@ from flask import Flask,render_template,request
 import sqlite3
 from pycheck import run_checks
 from score import calculate_score
+from score import results
 
-app = Flask(__name__, template_folder=".", static_folder="static")
+app=Flask(__name__,template_folder=".",static_folder=".")
 
 def get_db():
     conn=sqlite3.connect("data.db")

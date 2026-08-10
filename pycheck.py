@@ -58,6 +58,11 @@ def check_cookie_security(url):
                 rest = {k.lower(): v for k, v in c._rest.items()}
             elif hasattr(c, "rest"):
                 rest = {k.lower(): v for k, v in c.rest.items()}
+                rest = {}
+            if hasattr(c, "_rest"):
+                rest = {k.lower(): v for k, v in c._rest.items()}
+            elif hasattr(c, "rest"):
+                rest = {k.lower(): v for k, v in c.rest.items()}
 
             # require either HttpOnly or SameSite=strict for safety
             if "httponly" not in rest and rest.get("samesite", "").lower() != "strict":

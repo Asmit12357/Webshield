@@ -54,3 +54,19 @@ ul, table {
     color: #39ff14;
     text-shadow: 0 0 6px #39ff14;
 }
+.form-control {
+    background-color: #0a0f1f;
+    color: #39ff14;
+    border: 1px solid #00eaff;
+}
+
+.form-control::placeholder {
+    color: #39ff14aa;
+}
+
+.form-control:focus {
+    background-color: #0a0f1f;
+    color: #39ff14;
+    border-color: #00eaff;
+    box-shadow: 0 0 8px #00eaff;
+}

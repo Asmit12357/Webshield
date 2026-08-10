@@ -1,3 +1,4 @@
+import sqlite3
 def calculate_score(results):
     score=0
     if results["https"]:
