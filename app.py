@@ -16,10 +16,25 @@ app = Flask(
     static_folder=STATIC_DIR
 )
 
+# Vercel serverless functions sometimes receive the rewritten path (e.g. /api/index.py or /api)
+# PrefixMiddleware strips this prefix so Flask routing functions identically both locally and on Vercel
+class PrefixMiddleware:
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        path_info = environ.get("PATH_INFO", "")
+        for prefix in ["/api/index.py", "/api/index", "/api"]:
+            if path_info.startswith(prefix):
+                environ["PATH_INFO"] = path_info[len(prefix):] or "/"
+                break
+        return self.wsgi_app(environ, start_response)
+
+app.wsgi_app = PrefixMiddleware(app.wsgi_app)
+
 def get_db():
     if os.environ.get("VERCEL"):
         # On Vercel (Linux serverless), tempfile.gettempdir() resolves to /tmp
-        # Cross-platform support ensures tests also pass on Windows
         temp_dir = tempfile.gettempdir()
         db_path = os.path.join(temp_dir, "data.db")
         if not os.path.exists(db_path):
