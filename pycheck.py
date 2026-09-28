@@ -54,14 +54,10 @@ def check_cookie_security(url):
                continue
             if not getattr(c,"secure",False):
                 secure_ok=False
-            if hasattr(c, "_rest"):
+            rest = {}
+            if hasattr(c, "_rest") and c._rest:
                 rest = {k.lower(): v for k, v in c._rest.items()}
-            elif hasattr(c, "rest"):
-                rest = {k.lower(): v for k, v in c.rest.items()}
-                rest = {}
-            if hasattr(c, "_rest"):
-                rest = {k.lower(): v for k, v in c._rest.items()}
-            elif hasattr(c, "rest"):
+            elif hasattr(c, "rest") and c.rest:
                 rest = {k.lower(): v for k, v in c.rest.items()}
 
             # require either HttpOnly or SameSite=strict for safety
