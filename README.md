@@ -46,20 +46,21 @@ Because WebShield makes requests on behalf of whoever uses it, it protects itsel
 - Scans are rate-limited to 10 per minute per client. The limiter lives in memory, so on a serverless host it is
   per instance, not global.
 
-Known limitation: the address is checked before connecting, not pinned, so a hostile DNS server that changes its
-answer between the check and the request could in theory bypass it.
+- Each connection goes to the exact address that passed the check (the hostname is still used for the Host header,
+  SNI and certificate matching), so a hostile DNS server cannot swap in a private address after the check.
 
 ## Project structure
 
 | File | Role |
 |---|---|
 | `app.py` | Flask routes (`/`, `/scan/<id>`, `/history`), database setup and migration, rate limiting |
-| `pycheck.py` | The scan engine: input validation, fetching, and every check |
+| `pycheck.py` | The scan engine: input validation and the public-address rule, the redirect loop, deadline, and every check |
+| `network.py` | The one place the engine touches the network (DNS, one HTTP request, TLS handshake). `RealNetwork` pins connections to validated addresses |
 | `score.py` | Turns check results into a score and a grade |
 | `templates/` | Jinja templates for the scanner, result and history pages |
 | `public/static/style.css`, `public/static/app.js` | The one copy of the assets: Vercel serves `public/` from its CDN and Flask serves the same folder locally. The stylesheet is split into ordered `@layer`s; `app.js` is optional progressive enhancement driven by `data-` attributes |
 | `api/index.py`, `vercel.json` | Entry point and routing for Vercel |
-| `tests/` | pytest suite (checks, scoring, app behavior); no network needed |
+| `tests/` | pytest suite (checks, scoring, app behavior, the engine run against a scripted site in `fake_network.py`); no network needed |
 | `record.sql` | Reference copy of the database schema |
 
 ### Design decisions

@@ -1,12 +1,15 @@
 """Each check is tested against fabricated responses: no network needed."""
-import socket
-
 import pytest
 
 import pycheck
 from pycheck import (FetchResult, ScanError, check_certificate, check_cookies, check_csp, check_frame,
                      check_hsts, check_http_redirect, check_https, check_mixed_content, check_nosniff,
                      check_referrer, check_server_leakage, validate_target)
+from tests.fake_network import PUBLIC_IP, ScriptedNetwork, hop
+
+
+def dns(host, *addresses):
+    return ScriptedNetwork(dns={host: list(addresses)})
 
 
 def page(headers=None, cookies=None, url="https://example.com/", body="", tls_error=False):
@@ -38,21 +41,6 @@ def test_certificate_states():
     assert check_certificate({**GOOD_TLS, "days_left": 5})["status"] == "warn"
     assert check_certificate({**GOOD_TLS, "days_left": -1})["status"] == "fail"
     assert check_certificate({**GOOD_TLS, "version": "TLSv1"})["status"] == "warn"
-
-
-def test_http_redirect_follows_www_hop(monkeypatch):
-    """http://x -> http://www.x -> https://www.x counts as a redirect to HTTPS."""
-    monkeypatch.setattr(pycheck, "validate_target", lambda url: None)
-
-    class R:
-        def __init__(self, loc): self.headers = {"Location": loc} if loc else {}; self.is_redirect = bool(loc)
-        def close(self): pass
-
-    chain = iter([R("http://www.example.com/"), R("https://www.example.com/")])
-    monkeypatch.setattr(pycheck.requests, "get", lambda *a, **k: next(chain))
-    assert pycheck.probe_http_redirect("example.com") == "redirects"
-    monkeypatch.setattr(pycheck.requests, "get", lambda *a, **k: R(None))
-    assert pycheck.probe_http_redirect("example.com") == "plain"
 
 
 def test_http_redirect_outcomes():
@@ -165,45 +153,40 @@ def test_mixed_content():
 
 
 # --- SSRF guard / input validation -------------------------------------------------------------
-def fake_dns(ip):
-    def _getaddrinfo(host, port, **kw):
-        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port))]
-    return _getaddrinfo
-
-
 @pytest.mark.parametrize("ip", ["127.0.0.1", "10.0.0.5", "192.168.1.1", "172.16.0.9", "169.254.169.254", "100.64.0.1", "0.0.0.0"])
-def test_private_addresses_rejected(monkeypatch, ip):
-    monkeypatch.setattr(socket, "getaddrinfo", fake_dns(ip))
+def test_private_addresses_rejected(ip):
     with pytest.raises(ScanError):
-        validate_target("https://example.com")
+        validate_target("https://example.com", dns("example.com", ip))
+
+
+def test_one_private_address_among_public_ones_is_enough_to_reject():
+    with pytest.raises(ScanError):
+        validate_target("https://example.com", dns("example.com", PUBLIC_IP, "10.0.0.5"))
 
 
 @pytest.mark.parametrize("target", ["http://127.0.0.1/", "http://[::1]/", "http://169.254.169.254/latest/meta-data/", "http://localhost/"])
 def test_ip_literals_and_localhost_rejected(target):
     with pytest.raises(ScanError):
-        validate_target(target)
+        validate_target(target, dns("localhost", "127.0.0.1"))
 
 
 @pytest.mark.parametrize("target", ["https://example.com:8080", "https://example.com:22", "https://user:pw@example.com",
                                     "https://", "ftp://example.com", "https://not a host", "https://nodot"])
-def test_bad_targets_rejected(monkeypatch, target):
-    monkeypatch.setattr(socket, "getaddrinfo", fake_dns("93.184.216.34"))
+def test_bad_targets_rejected(target):
     with pytest.raises(ScanError):
-        validate_target(target)
+        validate_target(target, dns("example.com", PUBLIC_IP))
 
 
-def test_public_address_accepted(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", fake_dns("93.184.216.34"))
-    validate_target("https://example.com")
-    validate_target("http://example.com:80/path")
+def test_public_address_accepted_and_returned():
+    network = dns("example.com", PUBLIC_IP)
+    assert validate_target("https://example.com", network) == [PUBLIC_IP]
+    assert validate_target("http://example.com:80/path", network) == [PUBLIC_IP]
+    assert network.lookups == [("example.com", 443), ("example.com", 80)]
 
 
-def test_unresolvable_host_rejected(monkeypatch):
-    def boom(*a, **k):
-        raise socket.gaierror
-    monkeypatch.setattr(socket, "getaddrinfo", boom)
-    with pytest.raises(ScanError):
-        validate_target("https://nonexistent-domain.example")
+def test_unresolvable_host_rejected():
+    with pytest.raises(ScanError, match="Could not find a server"):
+        validate_target("https://nonexistent-domain.example", ScriptedNetwork())
 
 
 def test_normalize_url():
@@ -218,30 +201,22 @@ def test_report_only_csp_is_weak_not_missing():
     assert check_csp(page())["status"] == "fail"
 
 
-class FakeResp:
-    def __init__(self, status, headers=None):
-        self.status_code, self.headers, self.closed = status, headers or {}, False
-
-    def close(self):
-        self.closed = True
-
-
 @pytest.mark.parametrize("status,headers", [(403, {}), (401, {}), (429, {}), (202, {"x-amzn-waf-action": "challenge"}),
                                             (403, {"cf-mitigated": "challenge"})])
 def test_refused_or_challenged_responses_are_not_scored(status, headers):
     with pytest.raises(ScanError, match="refused the scan"):
-        pycheck.check_response_is_real_site(FakeResp(status, headers))
+        pycheck.check_response_is_real_site(hop(status, headers))
 
 
 @pytest.mark.parametrize("status", [500, 502, 503])
 def test_server_errors_are_not_scored(status):
     with pytest.raises(ScanError, match="server error"):
-        pycheck.check_response_is_real_site(FakeResp(status))
+        pycheck.check_response_is_real_site(hop(status))
 
 
 @pytest.mark.parametrize("status", [200, 202, 204, 404])
 def test_normal_responses_are_scored(status):
-    pycheck.check_response_is_real_site(FakeResp(status))
+    pycheck.check_response_is_real_site(hop(status))
 
 
 @pytest.mark.parametrize("typed,stored", [

@@ -1,33 +1,24 @@
 """WebShield scan engine.
 
-run_checks(url) fetches the target once (following redirects by hand so every hop is
-validated), then evaluates a list of checks. Each check returns a dict:
+run_checks(url) fetches the target once (following redirects by hand so every hop is validated), probes
+its TLS certificate and its plain-HTTP behaviour, then evaluates a list of checks. Each check returns a dict:
     {key, name, status: pass|warn|fail|na, points, max, evidence, fix}
+
+Everything that touches the network goes through a Network (see network.py), so the whole engine, including
+the redirect loop, the deadline and the public-address rule, can be run against a scripted site in tests.
 """
 import ipaddress
 import re
-import socket
-import ssl
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
-import requests
-import urllib3
 from bs4 import BeautifulSoup
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
+from network import NameNotFound, NetworkError, RealNetwork, TlsFailure
 
 MAX_REDIRECTS = 5
-MAX_BODY_BYTES = 256 * 1024
 SCAN_DEADLINE_SECONDS = 15
 ALLOWED_PORTS = (80, 443)
 HSTS_MIN_SECONDS = 15552000  # 180 days
@@ -81,15 +72,19 @@ def normalize_url(url):
     return urlunsplit((parts.scheme.lower(), netloc, path, parts.query, ""))
 
 
-def validate_target(url):
-    """Raise ScanError unless url points at a public host on port 80/443."""
+def validate_target(url, network=None):
+    """Raise ScanError unless url points at a public host on port 80/443. Returns the host's addresses.
+
+    The returned addresses are the ones that passed the check; callers connect to exactly those.
+    """
+    network = network or RealNetwork()
     try:
         parsed = urlparse(url)
         port = parsed.port
     except ValueError:
         raise ScanError("That doesn't look like a valid URL.")
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
-        if parsed.scheme not in ("http", "https") and parsed.scheme:
+        if parsed.scheme and parsed.scheme not in ("http", "https"):
             raise ScanError("Only http:// and https:// addresses can be scanned.")
         raise ScanError("Enter a website address such as example.com.")
     if parsed.username or parsed.password:
@@ -105,33 +100,34 @@ def validate_target(url):
     if port not in (None,) + ALLOWED_PORTS:
         raise ScanError("Only the standard web ports (80 and 443) can be scanned.")
     try:
-        infos = socket.getaddrinfo(host, port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
-    except socket.gaierror:
+        addresses = network.resolve(host, port or (443 if parsed.scheme == "https" else 80))
+    except NameNotFound:
         raise ScanError(f"Could not find a server named '{host}'.")
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
+    if not addresses:
+        raise ScanError(f"Could not find a server named '{host}'.")
+    for address in addresses:
+        ip = ipaddress.ip_address(address)
         if getattr(ip, "ipv4_mapped", None):
             ip = ip.ipv4_mapped
         if not ip.is_global:
             raise ScanError("Scanning private, local or reserved addresses is not allowed.")
+    return addresses
 
 
-# ----------------------------------------------------------------------------- network
+# ----------------------------------------------------------------------------- network use
 
-def check_response_is_real_site(resp):
+def check_response_is_real_site(hop):
     """Refuse to score an error page or a bot-protection challenge: its headers say nothing about the site."""
-    challenged = any(resp.headers.get(name, "").lower() == value for name, value in CHALLENGE_HEADERS.items())
-    if challenged or resp.status_code in REFUSED_STATUSES:
-        resp.close()
-        raise ScanError(f"The site refused the scan (status {resp.status_code}), usually because it blocks "
+    challenged = any(hop.headers.get(name, "").lower() == value for name, value in CHALLENGE_HEADERS.items())
+    if challenged or hop.status in REFUSED_STATUSES:
+        raise ScanError(f"The site refused the scan (status {hop.status}), usually because it blocks "
                         "automated visitors. Its real security headers could not be read, so no score was given.")
-    if resp.status_code >= 500:
-        resp.close()
-        raise ScanError(f"The site returned a server error (status {resp.status_code}), "
+    if hop.status >= 500:
+        raise ScanError(f"The site returned a server error (status {hop.status}), "
                         "so it cannot be assessed right now. Try again later.")
 
 
-def fetch(url, deadline):
+def fetch(url, deadline, network):
     """GET url following up to MAX_REDIRECTS redirects, validating every hop."""
     verify = True
     tls_error = False
@@ -139,70 +135,38 @@ def fetch(url, deadline):
     hops = 0
     current = url
     while True:
-        validate_target(current)
+        addresses = validate_target(current, network)
         if time.monotonic() > deadline:
             raise ScanError("The scan took too long and was stopped.")
         try:
-            resp = requests.get(current, headers=HEADERS, timeout=(3, 5), allow_redirects=False,
-                                verify=verify, stream=True)
-        except requests.exceptions.SSLError:
+            hop = network.get(current, addresses, verify)
+        except TlsFailure:
             if not verify:
                 raise ScanError("Could not establish a TLS connection to the site.")
             verify, tls_error = False, True        # retry this hop to still read its headers
             continue
-        except requests.exceptions.RequestException:
+        except NetworkError:
             raise ScanError("Could not connect to the site (timeout or connection refused).")
 
-        raw = getattr(resp.raw, "headers", None)
-        if raw is not None and hasattr(raw, "getlist"):
-            cookies.extend(raw.getlist("Set-Cookie"))
-
-        if resp.is_redirect and resp.headers.get("Location"):
-            resp.close()
+        cookies.extend(hop.cookies)
+        if hop.is_redirect:
             hops += 1
             if hops > MAX_REDIRECTS:
                 raise ScanError("The site redirected too many times.")
-            current = urljoin(current, resp.headers["Location"])
+            current = urljoin(current, hop.location)
             continue
 
-        check_response_is_real_site(resp)
-
-        body = ""
-        if "html" in resp.headers.get("Content-Type", "").lower():
-            data = resp.raw.read(MAX_BODY_BYTES, decode_content=True)
-            body = data.decode(resp.encoding or "utf-8", errors="replace")
-        resp.close()
-        return FetchResult(
-            final_url=resp.url, status=resp.status_code,
-            headers={k.lower(): v for k, v in resp.headers.items()},
-            cookies=cookies, body=body, tls_error=tls_error, hops=hops,
-        )
+        check_response_is_real_site(hop)
+        return FetchResult(final_url=current, status=hop.status, headers=hop.headers,
+                           cookies=cookies, body=hop.body, tls_error=tls_error, hops=hops)
 
 
-def probe_tls(host, port=443):
+def probe_tls(host, addresses, network, port=443):
     """Handshake with full verification. Returns a dict describing the certificate."""
-    info = {"valid": False, "error": None, "expires": None, "days_left": None,
-            "issuer": None, "version": None}
-    ctx = ssl.create_default_context()
-    try:
-        with socket.create_connection((host, port), timeout=4) as sock:
-            with ctx.wrap_socket(sock, server_hostname=host) as tls:
-                cert = tls.getpeercert()
-                info["valid"] = bool(cert)
-                info["version"] = tls.version()
-                expires = datetime.fromtimestamp(ssl.cert_time_to_seconds(cert["notAfter"]), timezone.utc)
-                info["expires"] = expires.date().isoformat()
-                info["days_left"] = (expires - datetime.now(timezone.utc)).days
-                issuer = dict(x[0] for x in cert.get("issuer", ()))
-                info["issuer"] = issuer.get("organizationName") or issuer.get("commonName")
-    except ssl.SSLCertVerificationError as e:
-        info["error"] = e.verify_message or "certificate verification failed"
-    except (OSError, ssl.SSLError):
-        info["error"] = "could not complete a TLS handshake on port 443"
-    return info
+    return network.handshake(host, port, addresses)
 
 
-def probe_http_redirect(host):
+def probe_http_redirect(host, network):
     """Request http://host/ and follow up to 3 redirects (e.g. http://x -> http://www.x -> https://www.x).
 
     Returns 'redirects' if the chain reaches https://, 'plain' if it ends on plain HTTP, 'closed' if
@@ -211,18 +175,15 @@ def probe_http_redirect(host):
     current = f"http://{host}/"
     try:
         for _ in range(4):
-            validate_target(current)
-            r = requests.get(current, headers=HEADERS, timeout=(3, 4), allow_redirects=False, stream=True)
-            location = r.headers.get("Location", "")
-            is_redirect = r.is_redirect
-            r.close()
-            if not is_redirect or not location:
+            addresses = validate_target(current, network)
+            hop = network.get(current, addresses, True)
+            if not hop.is_redirect:
                 return "plain"
-            current = urljoin(current, location)
+            current = urljoin(current, hop.location)
             if current.lower().startswith("https://"):
                 return "redirects"
         return "plain"
-    except (ScanError, requests.exceptions.RequestException):
+    except (ScanError, NetworkError):
         return "closed"
 
 
@@ -413,17 +374,18 @@ def check_mixed_content(f):
 
 # ----------------------------------------------------------------------------- orchestration
 
-def run_checks(url):
+def run_checks(url, network=None):
     """Scan url and return the list of check results. Raises ScanError if it can't be scanned."""
+    network = network or RealNetwork()
     url = normalize_url(url)
-    validate_target(url)
+    addresses = validate_target(url, network)
     host = urlparse(url).hostname
     deadline = time.monotonic() + SCAN_DEADLINE_SECONDS
 
     with ThreadPoolExecutor(max_workers=3) as pool:
-        main = pool.submit(fetch, url, deadline)
-        tls = pool.submit(probe_tls, host)
-        redirect = pool.submit(probe_http_redirect, host)
+        main = pool.submit(fetch, url, deadline, network)
+        tls = pool.submit(probe_tls, host, addresses, network)
+        redirect = pool.submit(probe_http_redirect, host, network)
         fetched = main.result()          # ScanError propagates
         tls_info, redirect_outcome = tls.result(), redirect.result()
 
