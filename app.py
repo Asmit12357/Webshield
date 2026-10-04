@@ -6,6 +6,7 @@ import tempfile
 import threading
 import time
 from collections import defaultdict, deque
+from urllib.parse import parse_qsl, urlencode
 
 from flask import Flask, abort, g, redirect, render_template, request, url_for
 
@@ -27,19 +28,31 @@ app = Flask(
     static_folder=STATIC_DIR
 )
 
-# Vercel serverless functions sometimes receive the rewritten path (e.g. /api/index.py or /api)
-# PrefixMiddleware strips this prefix so Flask routing functions identically both locally and on Vercel
+# On Vercel every request is rewritten to /api/index.py, and the function only sees that rewritten
+# path. vercel.json therefore passes the real path in a `__path` query parameter, and this middleware
+# restores it (and removes the parameter) so Flask routes behave the same locally and on Vercel.
+# A path that still starts with /api/index.py is stripped as a fallback.
+PATH_PARAM = "__path"
+
+
 class PrefixMiddleware:
     def __init__(self, wsgi_app):
         self.wsgi_app = wsgi_app
 
     def __call__(self, environ, start_response):
-        path_info = environ.get("PATH_INFO", "")
-        for prefix in ["/api/index.py", "/api/index", "/api"]:
-            if path_info.startswith(prefix):
-                environ["PATH_INFO"] = path_info[len(prefix):] or "/"
-                break
+        params = parse_qsl(environ.get("QUERY_STRING", ""), keep_blank_values=True)
+        original = next((value for key, value in params if key == PATH_PARAM), None)
+        if original is not None:
+            environ["PATH_INFO"] = "/" + original.lstrip("/")
+            environ["QUERY_STRING"] = urlencode([(k, v) for k, v in params if k != PATH_PARAM])
+        else:
+            path_info = environ.get("PATH_INFO", "")
+            for prefix in ["/api/index.py", "/api/index", "/api"]:
+                if path_info.startswith(prefix):
+                    environ["PATH_INFO"] = path_info[len(prefix):] or "/"
+                    break
         return self.wsgi_app(environ, start_response)
+
 
 app.wsgi_app = PrefixMiddleware(app.wsgi_app)
 

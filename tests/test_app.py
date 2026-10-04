@@ -156,3 +156,13 @@ def test_home_console_hooks_for_progress_script(client):
     html = client.get("/").get_data(as_text=True)
     for hook in ("data-scan-form", "data-scan-button", "data-console-log", "data-scan-status", "data-fill="):
         assert hook in html
+
+
+def test_vercel_rewrite_restores_original_path_and_query(client, fake_scan):
+    client.post("/", data={"url": "alpha.com"})
+    client.post("/", data={"url": "beta.com"})
+    # vercel.json rewrites /history?q=alpha to /api/index.py?q=alpha&__path=/history
+    page = client.get("/api/index.py?q=alpha&__path=/history").get_data(as_text=True)
+    assert "Scan history" in page and "alpha.com" in page and "beta.com" not in page
+    assert "Scan history" not in client.get("/api/index.py?__path=/").get_data(as_text=True)
+    assert "HSTS" in client.get("/api/index.py?__path=/scan/1").get_data(as_text=True)
