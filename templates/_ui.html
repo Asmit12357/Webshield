@@ -71,11 +71,11 @@
             {% for s in scans %}
             <tr>
                 <td class="site"><a href="/scan/{{ s['id'] }}">{{ s['url'] }}</a></td>
-                <td class="num grade-cell tone-{{ tone(s['score']) }}">{{ s['grade'] or '–' }}</td>
-                <td class="num">{{ s['score'] }}</td>
+                <td class="num grade-cell tone-{{ tone(s['score']) }}" data-label="Grade">{{ s['grade'] or '–' }}</td>
+                <td class="num" data-label="Score">{{ s['score'] }}</td>
                 {% if show_change %}
                 {% set diff = s['score'] - s['prev_score'] if s['prev_score'] is not none else none %}
-                <td class="num change{% if s['score_version'] == 2 and diff is not none and diff != 0 %} {{ 'up' if diff > 0 else 'down' }}{% endif %}">
+                <td data-label="Change" class="num change{% if s['score_version'] == 2 and diff is not none and diff != 0 %} {{ 'up' if diff > 0 else 'down' }}{% endif %}">
                     {%- if s['score_version'] != 2 %}–
                     {%- elif diff is none %}First scan
                     {%- elif diff > 0 %}+{{ diff }}
@@ -83,7 +83,7 @@
                     {%- else %}No change{% endif -%}
                 </td>
                 {% endif %}
-                <td class="when">{{ s['timestamp'] }}</td>
+                <td class="when" data-label="Scanned">{{ s['timestamp'] }}</td>
             </tr>
             {% endfor %}
         </tbody>

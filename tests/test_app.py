@@ -166,3 +166,11 @@ def test_vercel_rewrite_restores_original_path_and_query(client, fake_scan):
     assert "Scan history" in page and "alpha.com" in page and "beta.com" not in page
     assert "Scan history" not in client.get("/api/index.py?__path=/").get_data(as_text=True)
     assert "HSTS" in client.get("/api/index.py?__path=/scan/1").get_data(as_text=True)
+
+
+def test_error_keeps_what_the_visitor_typed(client, monkeypatch):
+    def boom(url):
+        raise ScanError("nope")
+    monkeypatch.setattr(app_module, "run_checks", boom)
+    page = client.post("/", data={"url": 'bad"><b>x.com'}).get_data(as_text=True)
+    assert 'value="bad&#34;&gt;&lt;b&gt;x.com"' in page      # kept, and escaped

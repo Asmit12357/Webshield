@@ -12,7 +12,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
 import requests
 import urllib3
@@ -31,6 +31,9 @@ MAX_BODY_BYTES = 256 * 1024
 SCAN_DEADLINE_SECONDS = 15
 ALLOWED_PORTS = (80, 443)
 HSTS_MIN_SECONDS = 15552000  # 180 days
+REFUSED_STATUSES = (401, 403, 429)
+# Headers bot-protection systems add to the challenge page they serve instead of the real site.
+CHALLENGE_HEADERS = {"x-amzn-waf-action": "challenge", "cf-mitigated": "challenge"}
 
 HOSTNAME_RE = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$", re.I)
 SESSIONISH_COOKIE_RE = re.compile(r"sess|sid|auth|token|login|jwt|csrf|user", re.I)
@@ -57,11 +60,25 @@ class FetchResult:
 # ----------------------------------------------------------------------------- input / SSRF
 
 def normalize_url(url):
-    """Strip whitespace and default to https:// when no scheme is given."""
+    """Trim the input, default to https://, and canonicalise so one site is always stored one way.
+
+    The scheme and host are lower-cased, a trailing dot on the host, the fragment and a bare "/" path are
+    dropped. A non-web scheme (ftp://) is left alone for validate_target to reject with a clear message.
+    """
     url = (url or "").strip()
+    if re.match(r"^[a-z][a-z0-9+.-]*://", url, re.I) and not re.match(r"^https?://", url, re.I):
+        return url
     if not re.match(r"^https?://", url, re.I):
-        return f"https://{url}"
-    return url
+        url = f"https://{url}"
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url
+    netloc = parts.netloc.lower()
+    if netloc.endswith("."):
+        netloc = netloc[:-1]
+    path = "" if parts.path == "/" else parts.path
+    return urlunsplit((parts.scheme.lower(), netloc, path, parts.query, ""))
 
 
 def validate_target(url):
@@ -72,6 +89,8 @@ def validate_target(url):
     except ValueError:
         raise ScanError("That doesn't look like a valid URL.")
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        if parsed.scheme not in ("http", "https") and parsed.scheme:
+            raise ScanError("Only http:// and https:// addresses can be scanned.")
         raise ScanError("Enter a website address such as example.com.")
     if parsed.username or parsed.password:
         raise ScanError("URLs with embedded credentials are not allowed.")
@@ -98,6 +117,19 @@ def validate_target(url):
 
 
 # ----------------------------------------------------------------------------- network
+
+def check_response_is_real_site(resp):
+    """Refuse to score an error page or a bot-protection challenge: its headers say nothing about the site."""
+    challenged = any(resp.headers.get(name, "").lower() == value for name, value in CHALLENGE_HEADERS.items())
+    if challenged or resp.status_code in REFUSED_STATUSES:
+        resp.close()
+        raise ScanError(f"The site refused the scan (status {resp.status_code}), usually because it blocks "
+                        "automated visitors. Its real security headers could not be read, so no score was given.")
+    if resp.status_code >= 500:
+        resp.close()
+        raise ScanError(f"The site returned a server error (status {resp.status_code}), "
+                        "so it cannot be assessed right now. Try again later.")
+
 
 def fetch(url, deadline):
     """GET url following up to MAX_REDIRECTS redirects, validating every hop."""
@@ -132,6 +164,8 @@ def fetch(url, deadline):
                 raise ScanError("The site redirected too many times.")
             current = urljoin(current, resp.headers["Location"])
             continue
+
+        check_response_is_real_site(resp)
 
         body = ""
         if "html" in resp.headers.get("Content-Type", "").lower():
@@ -253,6 +287,10 @@ def check_csp(f):
     fix = "Start with: Content-Security-Policy: default-src 'self'; object-src 'none'; frame-ancestors 'self'\nthen allow only the sources your pages need. Avoid 'unsafe-inline' and 'unsafe-eval'."
     value = f.headers.get("content-security-policy")
     if not value:
+        if f.headers.get("content-security-policy-report-only"):
+            return _res("csp", "Content-Security-Policy", "warn", 15,
+                        "Only a report-only policy is sent (Content-Security-Policy-Report-Only). It reports violations but blocks nothing.",
+                        "When the reports look clean, send the same policy as Content-Security-Policy so the browser enforces it.")
         return _res("csp", "Content-Security-Policy", "fail", 15, "Content-Security-Policy header is missing.", fix)
     problems = []
     directives = {}

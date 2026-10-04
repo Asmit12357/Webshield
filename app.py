@@ -145,8 +145,9 @@ def recent_scans(db, limit=5):
     return db.execute("SELECT id, url, score, grade, timestamp FROM scans ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
 
-def index_with_error(message, status):
-    return render_template("index.html", recent_scans=recent_scans(get_db()), error=message), status
+def index_with_error(message, status, url_value=""):
+    """Re-render the home page with an error, keeping what the visitor typed so they can correct it."""
+    return render_template("index.html", recent_scans=recent_scans(get_db()), error=message, url_value=url_value), status
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -160,13 +161,13 @@ def index():
     if len(raw_url) > MAX_URL_LENGTH:
         return index_with_error("That URL is too long.", 400)
     if rate_limited(client_id()):
-        return index_with_error("Too many scans. Please wait a minute and try again.", 429)
+        return index_with_error("Too many scans. Please wait a minute and try again.", 429, raw_url)
 
     url = normalize_url(raw_url)
     try:
         checks = run_checks(url)
     except ScanError as e:
-        return index_with_error(str(e), 422)
+        return index_with_error(str(e), 422, raw_url)
 
     score = calculate_score(checks)
     grade = grade_for(score)

@@ -209,3 +209,53 @@ def test_unresolvable_host_rejected(monkeypatch):
 def test_normalize_url():
     assert pycheck.normalize_url("  example.com ") == "https://example.com"
     assert pycheck.normalize_url("http://example.com") == "http://example.com"
+
+
+# --- QA round: report-only CSP, refused / challenged responses -----------------------------------
+def test_report_only_csp_is_weak_not_missing():
+    c = check_csp(page(headers={"Content-Security-Policy-Report-Only": "default-src 'self'"}))
+    assert c["status"] == "warn" and "report-only" in c["evidence"]
+    assert check_csp(page())["status"] == "fail"
+
+
+class FakeResp:
+    def __init__(self, status, headers=None):
+        self.status_code, self.headers, self.closed = status, headers or {}, False
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.mark.parametrize("status,headers", [(403, {}), (401, {}), (429, {}), (202, {"x-amzn-waf-action": "challenge"}),
+                                            (403, {"cf-mitigated": "challenge"})])
+def test_refused_or_challenged_responses_are_not_scored(status, headers):
+    with pytest.raises(ScanError, match="refused the scan"):
+        pycheck.check_response_is_real_site(FakeResp(status, headers))
+
+
+@pytest.mark.parametrize("status", [500, 502, 503])
+def test_server_errors_are_not_scored(status):
+    with pytest.raises(ScanError, match="server error"):
+        pycheck.check_response_is_real_site(FakeResp(status))
+
+
+@pytest.mark.parametrize("status", [200, 202, 204, 404])
+def test_normal_responses_are_scored(status):
+    pycheck.check_response_is_real_site(FakeResp(status))
+
+
+@pytest.mark.parametrize("typed,stored", [
+    ("GitHub.COM", "https://github.com"),
+    ("https://example.com/", "https://example.com"),
+    ("HTTPS://Example.com/Path?q=1#frag", "https://example.com/Path?q=1"),
+    ("example.com.", "https://example.com"),
+    ("example.com:443/", "https://example.com:443"),
+])
+def test_normalize_url_gives_one_canonical_form(typed, stored):
+    assert pycheck.normalize_url(typed) == stored
+
+
+def test_non_web_scheme_gets_a_clear_message():
+    assert pycheck.normalize_url("ftp://github.com") == "ftp://github.com"
+    with pytest.raises(ScanError, match="Only http:// and https://"):
+        validate_target("ftp://github.com")

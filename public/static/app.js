@@ -78,10 +78,21 @@
             if (!source) return;
             var idleLabel = btn.textContent;
             btn.hidden = false;
+            function flash(label) {
+                btn.textContent = label;
+                setTimeout(function () { btn.textContent = idleLabel; }, 2000);
+            }
             btn.addEventListener('click', function () {
                 navigator.clipboard.writeText(source.textContent).then(function () {
-                    btn.textContent = 'Copied';
-                    setTimeout(function () { btn.textContent = idleLabel; }, 2000);
+                    flash('Copied');
+                }, function () {
+                    // Clipboard refused (permissions, unfocused page): select the text so Ctrl+C works.
+                    var range = document.createRange();
+                    range.selectNodeContents(source);
+                    var selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    flash('Press Ctrl+C to copy');
                 });
             });
         });

@@ -19,7 +19,7 @@
         <form method="POST" action="/" data-scan-form>
             <div class="prompt">
                 <label for="targetUrl" class="prompt-label">$ scan https://</label>
-                <input type="text" name="url" id="targetUrl" placeholder="example.com" required autofocus
+                <input type="text" name="url" id="targetUrl" placeholder="example.com" value="{{ url_value or '' }}" required autofocus
                        autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url">
                 <button type="submit" class="btn" data-scan-button>Scan site</button>
             </div>

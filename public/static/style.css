@@ -180,7 +180,7 @@
     .scans th { font-size: 0.85rem; font-weight: 600; color: var(--cyan); background: var(--raised); }
     .scans tbody tr:hover { background: rgb(0 234 255 / 0.05); }
     .scans .num { text-align: right; width: 1%; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .scans .site { font-family: var(--mono); font-size: 0.88rem; overflow-wrap: anywhere; }
+    .scans .site { min-width: 11rem; font-family: var(--mono); font-size: 0.88rem; overflow-wrap: break-word; }
     .scans .when { white-space: nowrap; color: var(--muted); font-size: 0.88rem; font-variant-numeric: tabular-nums; }
     .scans .change { font-size: 0.9rem; font-weight: 600; color: var(--muted); }
     .scans .change.up { color: var(--green); }
@@ -356,7 +356,16 @@
         .log-val { grid-column: 1 / -1; order: 3; }
         .line { grid-template-columns: 1.4em 1fr auto; }
         .line-evidence { grid-column: 2 / -1; }
-        .scans .when { display: none; }
+        .line .points { grid-column: 3; grid-row: 1; }
+        /* Table rows become small cards: the site on its own line, its figures beneath */
+        .scans, .scans tbody { display: block; }
+        .scans thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+        .scans tr { display: grid; grid-template-columns: auto auto 1fr; gap: 4px 18px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+        .scans tbody tr:last-child { border-bottom: 0; }
+        .scans td, .scans .num { display: block; width: auto; padding: 0; border: 0; text-align: left; }
+        .scans td[data-label]::before { content: attr(data-label) " "; font-size: 0.78rem; font-weight: 400; color: var(--muted); }
+        .scans .site { grid-column: 1 / -1; min-width: 0; }
+        .scans .when { grid-column: 1 / -1; font-size: 0.8rem; }
         .nav-link { margin-left: 14px; }
     }
 }
