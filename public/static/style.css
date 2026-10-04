@@ -1,72 +1,388 @@
+/*
+ * WebShield: neon terminal theme.
+ *
+ * Colour rules (each colour has one job):
+ *   cyan  = brand, links, focus      green = pass      amber = weak      red = fail
+ * Glow is reserved for the brand, the grade, the ledger, the console and focused controls.
+ *
+ * Layers run in the order below, so a later layer wins over an earlier one regardless of
+ * selector specificity. Pages never need to out-shout components.
+ */
+@layer reset, tokens, base, components, pages, a11y;
 
-body {
-    background: #0a0f1f;
-    color: #39ff14;
-    font-family: 'Courier New', monospace;
-}
-
-
-h1, h2, h3 {
-    color: #00eaff;
-    text-shadow: 0 0 8px #00eaff;
-}
-
-
-ul, table {
-    color: #39ff14;
-}
-
-.table thead {
-    background-color: #001f3f;
-    color: #00eaff;
-    text-shadow: 0 0 6px #00eaff;
-}
-.table tbody tr:hover {
-    background-color: #00112a;
-}
-.table-striped > tbody > tr:nth-of-type(odd) {
-    background-color: #0f1628;
-}
-.neon-table {
-    border: 1px solid #00eaff;
-}
-.btn-secondary {
-    background-color: #00eaff;
-    border: none;
-    color: #000;
+/* ----------------------------------------------------------------------------- reset */
+@layer reset {
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body, h1, h2, h3, p, ul, ol, dl, dd, figure { margin: 0; }
+    ul, ol { padding: 0; list-style: none; }
+    button, input { font: inherit; color: inherit; }
 }
 
-.btn-secondary:hover {
-    background-color: #39ff14;
-    color: #000;
+/* ----------------------------------------------------------------------------- tokens */
+@layer tokens {
+    :root {
+        --bg: #0a0f1f;
+        --panel: #0f1730;
+        --raised: #15204a;
+        --line: #26345f;
+        --text: #d6e4ff;
+        --muted: #92a3cc;
+
+        --cyan: #00eaff;
+        --green: #39ff14;
+        --amber: #ffb000;
+        --red: #ff3860;
+        --on-neon: #04121a;
+
+        --font: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+        --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+        --radius: 4px;
+        --blur-sm: 8px;
+        --blur-lg: 24px;
+        --measure: 68ch;
+
+        color-scheme: dark;
+    }
+
+    /* Status colour: any element with a tone-* class exposes it as --tone. */
+    .tone-pass { --tone: var(--green); }
+    .tone-warn { --tone: var(--amber); }
+    .tone-fail { --tone: var(--red); }
+    .tone-na { --tone: var(--muted); }
 }
 
-.neon-bg {
-    background: #0a0f1f;
-    color: #39ff14;
+/* ----------------------------------------------------------------------------- base */
+@layer base {
+    body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg) radial-gradient(ellipse 70% 38% at 50% -8%, rgb(0 234 255 / 0.1), transparent);
+        background-repeat: no-repeat;
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 1rem;
+        line-height: 1.6;
+    }
+
+    main { flex: 1; padding-bottom: 64px; }
+
+    h1, h2, h3 { line-height: 1.15; letter-spacing: 0.01em; }
+    h1 { font-size: clamp(2rem, 4.6vw, 3.2rem); font-weight: 700; }
+    h2 { font-size: 1.35rem; font-weight: 600; }
+    h3 { font-size: 1.05rem; font-weight: 600; }
+    .lead { font-size: 1.12rem; color: var(--muted); max-width: 54ch; }
+
+    a { color: var(--cyan); text-underline-offset: 3px; }
+    a:hover { color: #fff; }
+
+    :focus-visible {
+        outline: 2px solid var(--cyan);
+        outline-offset: 3px;
+        box-shadow: 0 0 var(--blur-sm) rgb(0 234 255 / 0.55);
+    }
+
+    ::selection { background: var(--cyan); color: var(--on-neon); }
+
+    .wrap { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+    .visually-hidden {
+        position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+        overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+
+    .skip-link {
+        position: absolute; left: 12px; top: -56px; z-index: 10;
+        background: var(--cyan); color: var(--on-neon); padding: 8px 14px; border-radius: var(--radius); font-weight: 600;
+    }
+    .skip-link:focus { top: 12px; }
 }
 
-.neon-text {
-    color: #00eaff;
-    text-shadow: 0 0 10px #00eaff, 0 0 25px #00eaff;
-}
-.neon-sub {
-    color: #39ff14;
-    text-shadow: 0 0 6px #39ff14;
-}
-.form-control {
-    background-color: #0a0f1f;
-    color: #39ff14;
-    border: 1px solid #00eaff;
+/* ----------------------------------------------------------------------------- components */
+@layer components {
+    /* Header and footer */
+    .site-header { border-bottom: 1px solid var(--line); background: rgb(10 15 31 / 0.85); backdrop-filter: blur(6px); }
+    .site-header-inner { display: flex; align-items: center; justify-content: space-between; height: 62px; }
+    .brand {
+        display: inline-flex; align-items: center; gap: 10px; color: var(--cyan); text-decoration: none;
+        font-weight: 700; font-size: 1.2rem; letter-spacing: 0.02em;
+        text-shadow: 0 0 var(--blur-sm) rgb(0 234 255 / 0.7);
+    }
+    .nav-link {
+        display: inline-block; padding: 6px 2px; margin-left: 22px; color: var(--muted);
+        text-decoration: none; border-bottom: 2px solid transparent;
+    }
+    .nav-link:hover { color: var(--text); }
+    .nav-link.current { color: var(--cyan); border-bottom-color: var(--cyan); }
+
+    .site-footer { border-top: 1px solid var(--line); padding: 22px 0; color: var(--muted); font-size: 0.88rem; }
+    .site-footer p { max-width: var(--measure); }
+
+    /* Buttons and links */
+    .btn {
+        display: inline-block; cursor: pointer; line-height: 1.2; font-weight: 600; text-decoration: none; text-align: center;
+        padding: 10px 20px; border-radius: var(--radius);
+        background: var(--cyan); color: var(--on-neon); border: 2px solid var(--cyan);
+        transition: box-shadow 0.15s;
+    }
+    .btn:hover { color: var(--on-neon); box-shadow: 0 0 var(--blur-lg) rgb(0 234 255 / 0.6); }
+    .btn:disabled { opacity: 0.65; cursor: progress; box-shadow: none; }
+    .btn-quiet { background: transparent; color: var(--cyan); }
+    .btn-quiet:hover { color: var(--cyan); background: rgb(0 234 255 / 0.1); box-shadow: none; }
+
+    .link-btn {
+        background: none; border: 0; padding: 2px 4px; cursor: pointer;
+        font-family: var(--mono); font-size: 0.88rem; color: var(--cyan);
+        text-decoration: underline; text-underline-offset: 3px;
+    }
+    .link-btn:hover { color: #fff; }
+    .text-link { font-size: 0.95rem; }
+
+    /* Section structure */
+    .block { margin-top: 52px; }
+    .block > h2, .block-head { margin-bottom: 16px; }
+    .block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+    .block-head h2 { margin: 0; }
+
+    .count {
+        display: inline-block; min-width: 1.7em; padding: 0 8px; margin-left: 8px; border-radius: 99px;
+        border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+        font-family: var(--mono); font-size: 0.8rem; text-align: center; vertical-align: middle;
+    }
+
+    /* Badge: a status word plus a glyph, so colour is never the only signal */
+    .badge {
+        display: inline-flex; align-items: center; gap: 6px; padding: 1px 10px; border-radius: 99px;
+        border: 1px solid var(--tone); color: var(--tone);
+        background: color-mix(in srgb, var(--tone) 12%, transparent);
+        font-size: 0.82rem; font-weight: 600;
+    }
+    .badge::before { font-weight: 700; }
+    .badge.tone-pass::before { content: "✓"; }
+    .badge.tone-warn::before { content: "!"; }
+    .badge.tone-fail::before { content: "✕"; }
+    .badge.tone-na::before { content: "–"; }
+
+    /* Notices */
+    .notice {
+        max-width: var(--measure); padding: 12px 16px; border-radius: var(--radius);
+        border: 1px solid var(--tone, var(--line)); background: color-mix(in srgb, var(--tone, var(--cyan)) 10%, var(--panel));
+    }
+    .notice + .notice { margin-top: 12px; }
+
+    /* Data table */
+    .table-scroll { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+    .scans { width: 100%; border-collapse: collapse; }
+    .scans th, .scans td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--line); }
+    .scans tbody tr:last-child td { border-bottom: 0; }
+    .scans th { font-size: 0.85rem; font-weight: 600; color: var(--cyan); background: var(--raised); }
+    .scans tbody tr:hover { background: rgb(0 234 255 / 0.05); }
+    .scans .num { text-align: right; width: 1%; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .scans .site { font-family: var(--mono); font-size: 0.88rem; overflow-wrap: anywhere; }
+    .scans .when { white-space: nowrap; color: var(--muted); font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+    .scans .change { font-size: 0.9rem; font-weight: 600; color: var(--muted); }
+    .scans .change.up { color: var(--green); }
+    .scans .change.down { color: var(--red); }
+    .grade-cell { font-weight: 700; font-size: 1.1rem; color: var(--tone); }
+
+    /* Findings that need attention: a card with a coloured edge */
+    .findings { display: grid; gap: 12px; }
+    .finding {
+        background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--tone);
+        border-radius: var(--radius); padding: 16px 20px; scroll-margin-top: 16px;
+    }
+    .finding-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+    .finding-head h3 { flex: 1; min-width: 12ch; }
+    .points { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+    .evidence { margin-top: 10px; max-width: 90ch; font-family: var(--mono); font-size: 0.84rem; color: var(--muted); overflow-wrap: anywhere; }
+
+    .fix { margin-top: 12px; }
+    .fix summary { cursor: pointer; width: fit-content; font-weight: 600; color: var(--cyan); }
+    .fix pre {
+        margin: 8px 0 0; padding: 12px 14px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
+        font-family: var(--mono); font-size: 0.82rem; white-space: pre-wrap; overflow-wrap: anywhere;
+    }
+    .copy-btn {
+        margin-top: 8px; cursor: pointer; padding: 4px 12px; border-radius: var(--radius);
+        background: transparent; color: var(--cyan); border: 1px solid var(--cyan); font-size: 0.85rem; font-weight: 600;
+    }
+    .copy-btn:hover { background: rgb(0 234 255 / 0.1); }
+    .copy-btn[hidden] { display: none; }
+
+    /* Checks that passed or were not scored: one quiet line each */
+    .lines { border-top: 1px solid var(--line); }
+    .line {
+        display: grid; grid-template-columns: 1.4em minmax(9rem, 14rem) 1fr auto; gap: 4px 12px; align-items: baseline;
+        padding: 10px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 16px;
+    }
+    .line .tick { font-weight: 700; text-align: center; color: var(--tone); }
+    .line-name { font-weight: 600; }
+    .line-evidence { font-family: var(--mono); font-size: 0.82rem; color: var(--muted); overflow-wrap: anywhere; }
+    .line .points { white-space: nowrap; text-align: right; }
+    .line:target, .finding:target { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+    /* Points ledger: each block is one check, sized by its points */
+    .ledger { display: flex; gap: 4px; }
+    .ledger li { min-width: 10px; }
+    .seg {
+        display: block; height: 24px; border-radius: 3px; border: 2px solid var(--tone);
+        background: linear-gradient(90deg, var(--tone) var(--fill), transparent var(--fill));
+        box-shadow: 0 0 var(--blur-sm) color-mix(in srgb, var(--tone) 45%, transparent);
+    }
+    .seg:hover { outline: 2px solid var(--text); outline-offset: 2px; }
+    .ledger-key { margin-top: 12px; max-width: var(--measure); color: var(--muted); font-size: 0.88rem; }
 }
 
-.form-control::placeholder {
-    color: #39ff14aa;
+/* ----------------------------------------------------------------------------- pages */
+@layer pages {
+    /* Home: console */
+    .intro { padding: 64px 0 8px; }
+    .intro > * + * { margin-top: 18px; }
+
+    .console {
+        margin-top: 32px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+        box-shadow: 0 0 0 1px rgb(0 234 255 / 0.06), 0 0 48px rgb(0 234 255 / 0.1);
+        overflow: hidden;
+    }
+    .console-title {
+        padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--raised);
+        font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
+    }
+    .prompt { display: flex; align-items: center; gap: 4px; padding: 6px 8px 6px 16px; border-bottom: 1px solid var(--line); }
+    .prompt:focus-within { box-shadow: inset 0 0 0 1px var(--cyan), inset 0 0 20px rgb(0 234 255 / 0.12); }
+    .prompt-label { font-family: var(--mono); color: var(--cyan); white-space: nowrap; }
+    .prompt input {
+        flex: 1; min-width: 0; padding: 12px 8px; border: 0; background: transparent;
+        font-family: var(--mono); font-size: 1rem; caret-color: var(--cyan);
+    }
+    .prompt input:focus-visible { outline: none; box-shadow: none; }
+    .prompt input::placeholder { color: var(--muted); opacity: 0.7; }
+
+    .console-log { padding: 12px 0; }
+    .console-log li {
+        display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.5fr) 9rem; gap: 2px 16px; align-items: baseline;
+        padding: 4px 16px 4px 13px; border-left: 3px solid var(--tone);
+        background: color-mix(in srgb, var(--tone) 7%, transparent);
+        font-family: var(--mono); font-size: 0.82rem;
+    }
+    .log-key { color: var(--muted); overflow-wrap: anywhere; }
+    .log-val { overflow-wrap: anywhere; }
+    .log-tag { color: var(--tone); font-weight: 500; white-space: nowrap; }
+    .log-val i { color: var(--muted); }
+
+    .console-note { padding: 0 16px 14px; font-size: 0.85rem; color: var(--muted); }
+    .scan-status { padding: 0 16px 14px; color: var(--cyan); font-size: 0.92rem; }
+    .scan-status[hidden] { display: none; }
+
+    /* While a scan runs the example lines go neutral, then light up one at a time */
+    .console-log.is-scanning li { --tone: var(--muted); background: none; border-left-color: transparent; }
+    .console-log.is-scanning li.is-active { --tone: var(--cyan); background: rgb(0 234 255 / 0.08); border-left-color: var(--cyan); }
+    .console-log.is-scanning li.is-active .log-tag { animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.35; } }
+
+    .try { margin-top: 16px; color: var(--muted); font-size: 0.92rem; }
+
+    .checks-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; }
+    .checks-list > div { padding: 16px 0; border-top: 1px solid var(--line); }
+    .checks-list dt { font-weight: 600; margin-bottom: 4px; }
+    .checks-list dd { color: var(--muted); max-width: 52ch; }
+
+    /* Result: verdict with the neon grade */
+    .verdict {
+        display: grid; grid-template-columns: auto 1fr; gap: 40px; align-items: center;
+        margin-top: 40px; padding: 32px 36px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    }
+    .tube {
+        min-width: 1.5ch; padding: 0.04em 0.2em; text-align: center;
+        font-weight: 700; font-size: clamp(4.5rem, 14vw, 8rem); line-height: 1.1; color: var(--tone);
+        border: 3px solid var(--tone); border-radius: 16px;
+        text-shadow: 0 0 var(--blur-sm) var(--tone), 0 0 var(--blur-lg) color-mix(in srgb, var(--tone) 70%, transparent);
+        box-shadow: 0 0 var(--blur-sm) color-mix(in srgb, var(--tone) 70%, transparent),
+                    inset 0 0 var(--blur-sm) color-mix(in srgb, var(--tone) 45%, transparent);
+        animation: flicker 1.2s linear 1;
+    }
+    @keyframes flicker {
+        0%   { opacity: 0.15; }
+        8%   { opacity: 1; }
+        12%  { opacity: 0.3; }
+        20%  { opacity: 1; }
+        26%  { opacity: 0.55; }
+        34%  { opacity: 1; }
+        100% { opacity: 1; }
+    }
+    .verdict-label { color: var(--muted); font-size: 0.95rem; }
+    .target { margin: 2px 0 10px; font-family: var(--mono); font-weight: 500; font-size: clamp(1.25rem, 3vw, 1.9rem); overflow-wrap: anywhere; }
+    .target a { color: var(--text); text-decoration-color: var(--line); }
+    .target a:hover { color: var(--cyan); }
+    .score-line { font-size: 1.1rem; color: var(--muted); }
+    .score-line strong { color: var(--text); font-size: 1.5rem; }
+    .summary { display: block; margin-top: 2px; color: var(--tone); font-weight: 600; }
+    .actions { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 12px; }
+    .ledger-block { margin-top: 24px; }
+    .how-scored p { max-width: var(--measure); color: var(--muted); }
+
+    /* History and empty states */
+    .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 48px 0 8px; }
+    .page-head .lead { margin-top: 8px; }
+    .filter { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 24px; }
+    .filter input {
+        flex: 1 1 18rem; max-width: 28rem; padding: 9px 12px; border-radius: var(--radius);
+        background: var(--panel); border: 1px solid var(--line); caret-color: var(--cyan);
+    }
+    .filter input:focus-visible { border-color: var(--cyan); }
+    .filter input::placeholder { color: var(--muted); opacity: 0.7; }
+    .empty { padding: 32px 0; }
+    .empty > * + * { margin-top: 12px; }
+    .empty p { color: var(--muted); max-width: var(--measure); }
+
+    /* Narrow screens */
+    @media (max-width: 860px) {
+        .checks-list { grid-template-columns: 1fr; }
+        .intro { padding-top: 40px; }
+    }
+
+    @media (max-width: 560px) {
+        .verdict { grid-template-columns: 1fr; gap: 16px; padding: 24px 20px; }
+        .tube { justify-self: start; }
+        .prompt { flex-wrap: wrap; padding: 8px 12px; }
+        .prompt-label { width: 100%; }
+        .prompt input { flex-basis: 55%; }
+        .prompt .btn { width: 100%; margin-top: 4px; }
+        .page-head { flex-direction: column; align-items: flex-start; }
+        .console-log li { grid-template-columns: 1fr auto; }
+        .log-tag { text-align: right; }
+        .log-val { grid-column: 1 / -1; order: 3; }
+        .line { grid-template-columns: 1.4em 1fr auto; }
+        .line-evidence { grid-column: 2 / -1; }
+        .scans .when { display: none; }
+        .nav-link { margin-left: 14px; }
+    }
 }
 
-.form-control:focus {
-    background-color: #0a0f1f;
-    color: #39ff14;
-    border-color: #00eaff;
-    box-shadow: 0 0 8px #00eaff;
+/* ----------------------------------------------------------------------------- accessibility and output */
+@layer a11y {
+    @media (prefers-reduced-motion: reduce) {
+        * { scroll-behavior: auto !important; }
+        .tube, .console-log.is-scanning li.is-active .log-tag { animation: none; }
+        .btn { transition: none; }
+    }
+
+    /* High-contrast mode drops the glow; borders carry the meaning */
+    @media (forced-colors: active) {
+        * { text-shadow: none !important; box-shadow: none !important; }
+        .seg { forced-color-adjust: none; }
+    }
+
+    /* A printed result is a plain black-on-white report */
+    @media print {
+        :root { --bg: #fff; --panel: #fff; --raised: #eee; --line: #999; --text: #000; --muted: #333; --cyan: #000; --green: #0a6b00; --amber: #7a5200; --red: #a40020; }
+        body { display: block; background: #fff; }
+        * { text-shadow: none !important; box-shadow: none !important; animation: none !important; }
+        .site-header, .no-print, .copy-btn, .skip-link { display: none !important; }
+        .verdict, .finding, .line { break-inside: avoid; }
+        .tube { border-width: 2px; }
+        a { color: inherit; }
+    }
 }

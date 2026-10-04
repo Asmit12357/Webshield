@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#0a0f1f">
+    <title>{% block title %}WebShield{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+        <div class="wrap site-header-inner">
+            <a href="/" class="brand">
+                <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3Zm-1.2 14.2-3.5-3.5 1.4-1.4 2.1 2.1 4.6-4.6 1.4 1.4-6 6Z" fill="currentColor"/></svg>
+                WebShield
+            </a>
+            <nav aria-label="Main">
+                <a href="/" class="nav-link{% if request.path == '/' %} current{% endif %}">Scan</a>
+                <a href="/history" class="nav-link{% if request.path == '/history' %} current{% endif %}">History</a>
+            </nav>
+        </div>
+    </header>
+
+    <main id="main" class="wrap">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="wrap">
+            <p>
+                WebShield reads what a site sends to any visitor: its headers, cookies and certificate.
+                It does not test the site's code for vulnerabilities, so a high grade is not a guarantee.
+            </p>
+        </div>
+    </footer>
+</body>
+</html>

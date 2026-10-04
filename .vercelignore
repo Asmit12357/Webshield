@@ -3,3 +3,5 @@ __pycache__
 *.pyc
 tempCodeRunnerFile.py
 .git
+tests
+.pytest_cache

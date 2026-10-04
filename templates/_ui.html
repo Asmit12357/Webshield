@@ -1,0 +1,92 @@
+{#
+  Reusable interface pieces. Import with context so `tone` is available:
+    {% from "_ui.html" import finding, line, ledger, scan_table with context %}
+  Status values: pass, warn, fail, na. Each piece takes its colour from a tone-* class.
+#}
+
+{% macro status_label(status) -%}
+{{ {'pass': 'Pass', 'warn': 'Weak', 'na': 'N/A'}.get(status, 'Fail') }}
+{%- endmacro %}
+
+{% macro badge(status) -%}
+<span class="badge tone-{{ status }}">{{ status_label(status) }}</span>
+{%- endmacro %}
+
+{# A failing or weak check: a card with evidence and a fix. Failures open the fix by default. #}
+{% macro finding(c) %}
+<li class="finding tone-{{ c.status }}" id="check-{{ c.key }}">
+    <div class="finding-head">
+        {{ badge(c.status) }}
+        <h3>{{ c.name }}</h3>
+        <span class="points">{% if c.max %}{{ c.points }} of {{ c.max }} points{% else %}Not scored{% endif %}</span>
+    </div>
+    <p class="evidence">{{ c.evidence }}</p>
+    {% if c.fix %}
+    <details class="fix"{% if c.status == 'fail' %} open{% endif %}>
+        <summary>How to fix</summary>
+        <pre id="fix-{{ c.key }}">{{ c.fix }}</pre>
+        <button type="button" class="copy-btn" data-copy="#fix-{{ c.key }}" hidden>Copy fix</button>
+    </details>
+    {% endif %}
+</li>
+{% endmacro %}
+
+{# A passing or unscored check: one quiet line. #}
+{% macro line(c) %}
+<li class="line tone-{{ c.status }}" id="check-{{ c.key }}">
+    <span class="tick" aria-hidden="true">{% if c.status == 'pass' %}✓{% elif c.status in ('warn', 'fail') %}!{% else %}–{% endif %}</span>
+    <span class="line-name"><span class="visually-hidden">{{ status_label(c.status) }}: </span>{{ c.name }}</span>
+    <span class="line-evidence">{{ c.evidence }}</span>
+    <span class="points">{% if c.max %}{{ c.points }}/{{ c.max }}{% else %}Not scored{% endif %}</span>
+</li>
+{% endmacro %}
+
+{# Points ledger: one block per scored check, sized by its points, filled by the points earned. #}
+{% macro ledger(scored) %}
+<ol class="ledger">
+    {% for c in scored %}
+    <li style="flex: {{ c.max }} 1 0">
+        <a href="#check-{{ c.key }}" class="seg tone-{{ c.status }}" style="--fill: {{ (c.points * 100 / c.max) | round | int }}%"
+           title="{{ c.name }}: {{ c.points }} of {{ c.max }} points"
+           aria-label="{{ c.name }}: {{ c.points }} of {{ c.max }} points"></a>
+    </li>
+    {% endfor %}
+</ol>
+{% endmacro %}
+
+{# Table of scans. rows need id, url, score, grade, timestamp; with show_change also score_version and prev_score. #}
+{% macro scan_table(scans, show_change=false) %}
+<div class="table-scroll">
+    <table class="scans">
+        <thead>
+            <tr>
+                <th scope="col">Site</th>
+                <th scope="col" class="num">Grade</th>
+                <th scope="col" class="num">Score</th>
+                {% if show_change %}<th scope="col" class="num">Change</th>{% endif %}
+                <th scope="col" class="when">Scanned (UTC)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in scans %}
+            <tr>
+                <td class="site"><a href="/scan/{{ s['id'] }}">{{ s['url'] }}</a></td>
+                <td class="num grade-cell tone-{{ tone(s['score']) }}">{{ s['grade'] or '–' }}</td>
+                <td class="num">{{ s['score'] }}</td>
+                {% if show_change %}
+                {% set diff = s['score'] - s['prev_score'] if s['prev_score'] is not none else none %}
+                <td class="num change{% if s['score_version'] == 2 and diff is not none and diff != 0 %} {{ 'up' if diff > 0 else 'down' }}{% endif %}">
+                    {%- if s['score_version'] != 2 %}–
+                    {%- elif diff is none %}First scan
+                    {%- elif diff > 0 %}+{{ diff }}
+                    {%- elif diff < 0 %}−{{ diff | abs }}
+                    {%- else %}No change{% endif -%}
+                </td>
+                {% endif %}
+                <td class="when">{{ s['timestamp'] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}

@@ -1,28 +1,48 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Scan History</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body class="neon-bg p-5">
-    <div class="container">
-        <h1 class="neon-text text-center mb-4">Scan History</h1>
-        <table class="table table-bordered neon-table">
-            <thead>
-                <tr><th>URL</th><th>Score</th><th>Timestamp</th></tr>
-            </thead>
-            <tbody>
-                {% for row in rows %}
-                <tr>
-                    <td>{{ row['url'] }}</td>
-                    <td>{{ row['score'] }}</td>
-                    <td>{{ row['timestamp'] }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <a href="/" class="btn btn-secondary mt-3">Back</a>
+{% extends "base.html" %}
+{% from "_ui.html" import scan_table with context %}
+{% block title %}Scan history | WebShield{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>Scan history</h1>
+        <p class="lead">
+            {% if query %}{{ rows|length }} of {{ total }} {{ 'scan' if total == 1 else 'scans' }} match "{{ query }}"
+            {% else %}{{ rows|length }} {{ 'scan' if rows|length == 1 else 'scans' }} saved{% endif %}
+        </p>
     </div>
-</body>
-</html>
+    <a href="/" class="btn">Scan a site</a>
+</section>
+
+{% if ephemeral_history %}
+<p class="notice tone-warn">History on this deployment is temporary and resets when the server restarts.</p>
+{% endif %}
+
+{% if total %}
+<form method="GET" action="/history" class="filter" role="search">
+    <label for="filterQuery" class="visually-hidden">Filter by site</label>
+    <input type="search" id="filterQuery" name="q" value="{{ query }}" placeholder="Filter by site, for example github.com"
+           maxlength="100" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button type="submit" class="btn btn-quiet">Filter</button>
+    {% if query %}<a href="/history" class="text-link">Clear filter</a>{% endif %}
+</form>
+{% endif %}
+
+{% if rows %}
+<section class="block">
+    {{ scan_table(rows, show_change=true) }}
+</section>
+{% elif query %}
+<section class="block empty">
+    <h2>No scans match "{{ query }}"</h2>
+    <p>Check the spelling, or clear the filter to see every saved scan.</p>
+    <a href="/history" class="btn">Clear filter</a>
+</section>
+{% else %}
+<section class="block empty">
+    <h2>No scans yet</h2>
+    <p>Scan a site and the result will be saved here.</p>
+    <a href="/" class="btn">Scan your first site</a>
+</section>
+{% endif %}
+{% endblock %}

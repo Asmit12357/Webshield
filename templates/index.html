@@ -1,17 +1,65 @@
-<!DOCTYPE html>
-<html>
-   <head>
-    <title>Webshield tool</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-    <body class="p-5 neon-bg">
-        <div class="container">
-            <h1 class="mb-4 text-center neon-text">Webshield Score</h1>
-            <form method="POST">
-                <input type="text" name="url" class="form-control" placeholder="Enter a site URL" required>
-                <button class="btn btn-secondary mt-3">Check Security</button>
-            </form>
-        </div>
-    </body>
-</html>
+{% extends "base.html" %}
+{% from "_ui.html" import scan_table with context %}
+{% block title %}WebShield: check how well your website is protected{% endblock %}
+
+{% block content %}
+<section class="intro">
+    <h1>See how well a website is protected</h1>
+    <p class="lead">
+        Enter a site address. WebShield checks its HTTPS setup, certificate, security headers and cookies,
+        then lists what to fix.
+    </p>
+
+    {% if error %}
+    <p class="notice tone-fail" role="alert">{{ error }}</p>
+    {% endif %}
+
+    <div class="console">
+        <p class="console-title">webshield console</p>
+        <form method="POST" action="/" data-scan-form>
+            <div class="prompt">
+                <label for="targetUrl" class="prompt-label">$ scan https://</label>
+                <input type="text" name="url" id="targetUrl" placeholder="example.com" required autofocus
+                       autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url">
+                <button type="submit" class="btn" data-scan-button>Scan site</button>
+            </div>
+        </form>
+        <ol class="console-log" data-console-log aria-label="Example scan output">
+            <li class="tone-pass"><span class="log-key">strict-transport-security</span><span class="log-val">max-age=31536000</span><span class="log-tag">ok</span></li>
+            <li class="tone-fail"><span class="log-key">content-security-policy</span><span class="log-val"><i>not sent</i></span><span class="log-tag">missing</span></li>
+            <li class="tone-pass"><span class="log-key">x-content-type-options</span><span class="log-val">nosniff</span><span class="log-tag">ok</span></li>
+            <li class="tone-fail"><span class="log-key">server</span><span class="log-val">nginx/1.10.3</span><span class="log-tag">shows version</span></li>
+            <li class="tone-warn"><span class="log-key">set-cookie</span><span class="log-val">sid=…; Secure</span><span class="log-tag">no HttpOnly</span></li>
+        </ol>
+        <p class="console-note">Example output. A real scan reads these lines from the site you enter.</p>
+        <p class="scan-status" data-scan-status role="status" hidden>Checking the site. This usually takes 5 to 15 seconds.</p>
+    </div>
+
+    <p class="try">
+        Try one:
+        {% for site in ('github.com', 'google.com', 'cloudflare.com') %}
+        <button type="button" class="link-btn" data-fill="{{ site }}" data-fill-into="#targetUrl">{{ site }}</button>
+        {% endfor %}
+    </p>
+</section>
+
+{% if recent_scans %}
+<section class="block">
+    <div class="block-head">
+        <h2>Recent scans</h2>
+        <a href="/history" class="text-link">See all scans</a>
+    </div>
+    {{ scan_table(recent_scans) }}
+</section>
+{% endif %}
+
+<section class="block">
+    <h2>What gets checked</h2>
+    <dl class="checks-list">
+        <div><dt>HTTPS and certificate</dt><dd>Whether the site is served over HTTPS, the certificate is trusted and not about to expire, and plain HTTP redirects to HTTPS.</dd></div>
+        <div><dt>Browser security headers</dt><dd>HSTS, Content-Security-Policy, clickjacking protection, MIME sniffing and Referrer-Policy. The value is graded, not just whether the header exists.</dd></div>
+        <div><dt>Cookies</dt><dd>Whether session cookies set during the visit, including during redirects, carry the Secure, HttpOnly and SameSite flags.</dd></div>
+        <div><dt>Information leaks</dt><dd>Server and framework version numbers in headers, and insecure resources loaded on an HTTPS page.</dd></div>
+    </dl>
+</section>
+{% endblock %}

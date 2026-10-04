@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Page not found | WebShield{% endblock %}
+
+{% block content %}
+<section class="block empty">
+    <h1>Page not found</h1>
+    <p>
+        There is no page at this address.
+        {% if ephemeral_history %}If you followed a link to a scan, it may have been cleared: saved scans on this deployment reset when the server restarts.{% endif %}
+    </p>
+    <div class="actions">
+        <a href="/" class="btn">Scan a site</a>
+        <a href="/history" class="btn btn-quiet">View history</a>
+    </div>
+</section>
+{% endblock %}

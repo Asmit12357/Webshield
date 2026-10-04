@@ -1,26 +1,25 @@
-import sqlite3
-def calculate_score(results):
-    score=0
-    if results["https"]:
-        score+=25
-    if results["hsts"]:
-        score+=15
-    for value in results["headers"].values():
-        if value:
-            score+=5
-    if results["ssl_certificate"]:
-        score+=20
-    if results["cookie_security"]:
-        score+=10
-    if results["server_leakage"]:
-        score+=10
+"""Scoring: earned points / applicable points, scaled to 100.
+
+Checks with status "na" have max 0 and do not count for or against the site.
+A site whose TLS certificate is rejected is capped at CERT_FAIL_CAP, because
+nothing else it does protects visitors from interception.
+"""
+CERT_FAIL_CAP = 50
+
+GRADES = ((95, "A+"), (85, "A"), (75, "B"), (60, "C"), (40, "D"))
+
+
+def calculate_score(checks):
+    earned = sum(c["points"] for c in checks)
+    possible = sum(c["max"] for c in checks)
+    score = round(100 * earned / possible) if possible else 0
+    if any(c["key"] == "certificate" and c["status"] == "fail" for c in checks):
+        score = min(score, CERT_FAIL_CAP)
     return score
-def results():
-    conn=sqlite3.connect("data.db")
-    c=conn.cursor()
-    c.execute("SELECT url,score,timestamp FROM record ORDER BY id DESC LIMIT 5")
-    results=c.fetchall()
-    conn.close()
-    return results
 
 
+def grade_for(score):
+    for threshold, letter in GRADES:
+        if score >= threshold:
+            return letter
+    return "F"

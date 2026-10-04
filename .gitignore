@@ -4,3 +4,5 @@ __pycache__/
 .vscode/
 tempCodeRunnerFile.py
 .vercel/
+.pytest_cache/
+data.db
